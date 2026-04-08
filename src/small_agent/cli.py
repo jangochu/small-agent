@@ -7,8 +7,6 @@ from pathlib import Path
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
-from prompt_toolkit import PromptSession
-from prompt_toolkit.key_binding import KeyBindings
 
 from small_agent.agent import Agent
 from small_agent.config import load_settings, get_default_settings_json, save_settings
@@ -18,24 +16,6 @@ app = typer.Typer(
     help="A CLI agent powered by 阿里云百炼 with harness engineering patterns",
 )
 console = Console()
-
-
-def _create_keybindings() -> KeyBindings:
-    """Create key bindings for multi-line input support."""
-    bindings = KeyBindings()
-
-    @bindings.add("escape", "enter")
-    @bindings.add("meta-enter")
-    def _(event):
-        """Insert newline on Alt+Enter."""
-        event.current_buffer.insert_text("\n")
-
-    @bindings.add("enter")
-    def _(event):
-        """Submit on Enter (without Alt)."""
-        event.current_buffer.validate_and_handle()
-
-    return bindings
 
 
 @app.command()
@@ -104,18 +84,19 @@ def chat(
 ):
     """Start interactive chat or send a single prompt."""
     if prompt is None:
-        asyncio.run(_chat_repl_async())
+        _chat_repl()
     else:
         asyncio.run(_chat_single(prompt))
 
 
-async def _chat_repl_async():
-    """Run interactive REPL mode with async support."""
+def _chat_repl():
+    """Run interactive REPL mode synchronously."""
     from prompt_toolkit import PromptSession
     from prompt_toolkit.key_binding import KeyBindings
 
+    # Create agent synchronously
     try:
-        agent = await Agent.create()
+        agent = asyncio.run(Agent.create())
     except ValueError:
         console.print()
         console.print("[bold red]⚠️  API Key Not Configured[/bold red]")
@@ -145,13 +126,14 @@ async def _chat_repl_async():
 
     console.print("[bold green]Small Agent CLI[/bold green]")
     console.print("Type 'exit' or 'quit' to exit, 'clear' to reset conversation")
-    console.print("Press [bold]Alt+Enter[/bold] for new line, [bold]Enter[/bold] to send\n")
+    console.print("Press [bold]Escape+Enter[/bold] for new line, [bold]Enter[/bold] to send\n")
 
+    # Set up key bindings for multi-line input
     bindings = KeyBindings()
 
     @bindings.add("escape", "enter")
     def _(event):
-        """Insert newline on Alt+Enter (detected as Escape then Enter)."""
+        """Insert newline on Escape+Enter."""
         event.current_buffer.insert_text("\n")
 
     session = PromptSession(key_bindings=bindings)
@@ -175,20 +157,49 @@ async def _chat_repl_async():
         if not user_input.strip():
             continue
 
-        response = await agent.chat(user_input)
+        # Run async chat in a new event loop
+        response = asyncio.run(agent.chat(user_input))
 
         console.print()
         console.print(Markdown(response.content))
         console.print()
 
 
-@app.command()
-def run(
-    prompt: str = typer.Argument(..., help="Prompt to send"),
-    stream: bool = typer.Option(False, "--stream", "-s", help="Stream response"),
-):
-    """Run a single prompt and print response."""
-    asyncio.run(_run_async(prompt, stream))
+async def _chat_single(prompt: str):
+    """Handle single prompt mode."""
+    try:
+        agent = await Agent.create()
+    except ValueError:
+        console.print()
+        console.print("[bold red]⚠️  API Key Not Configured[/bold red]")
+        console.print()
+        console.print("You need to configure your Alibaba Cloud Bailian API key.")
+        console.print()
+        console.print("[bold]Option 1: Set in settings.json[/bold]")
+        console.print('  Add "api_key" to your settings.json:')
+        console.print()
+        console.print("  [dim]{[/dim]")
+        console.print("    [cyan]\"llm\"[/cyan]: [dim]{[/dim]")
+        console.print("      [cyan]\"bailian\"[/cyan]: [dim]{[/dim]")
+        console.print("        [cyan]\"api_key\"[/cyan]: [green]\"sk-your-key-here\"[/green],")
+        console.print("        [cyan]\"model\"[/cyan]: [cyan]\"qwen-max\"[/cyan]")
+        console.print("      [dim]}[/dim]")
+        console.print("    [dim]}[/dim]")
+        console.print("  [dim]}[/dim]")
+        console.print()
+        console.print("[bold]Option 2: Set environment variable[/bold]")
+        console.print("  [dim]# bash/zsh[/dim]")
+        console.print("  [green]export DASHSCOPE_API_KEY=sk-your-key-here[/green]")
+        console.print()
+        console.print("  [dim]# fish[/dim]")
+        console.print("  [green]set -gx DASHSCOPE_API_KEY sk-your-key-here[/green]")
+        console.print()
+        raise typer.Exit(1)
+
+    with console.status("[bold green]Thinking..."):
+        response = await agent.chat(prompt)
+    console.print()
+    console.print(Markdown(response.content))
 
 
 async def _run_async(prompt: str, stream: bool):
@@ -235,6 +246,15 @@ async def _run_async(prompt: str, stream: bool):
             response = await agent.run(prompt)
         console.print()
         console.print(Markdown(response.content))
+
+
+@app.command()
+def run(
+    prompt: str = typer.Argument(..., help="Prompt to send"),
+    stream: bool = typer.Option(False, "--stream", "-s", help="Stream response"),
+):
+    """Run a single prompt and print response."""
+    asyncio.run(_run_async(prompt, stream))
 
 
 def main():

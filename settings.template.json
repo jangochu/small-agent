@@ -1,0 +1,18 @@
+{
+  "llm": {
+    "provider": "bailian",
+    "bailian": {
+      "api_key_env": "DASHSCOPE_API_KEY",
+      "model": "qwen-max"
+    }
+  },
+  "hooks": {
+    "before_tool": null,
+    "after_tool": null,
+    "before_prompt": null,
+    "after_response": null
+  },
+  "memory": {
+    "directory": "~/.claude/projects/{project_name}/memory"
+  }
+}

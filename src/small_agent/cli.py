@@ -126,7 +126,7 @@ def _chat_repl():
 
     console.print("[bold green]Small Agent CLI[/bold green]")
     console.print("Type 'exit' or 'quit' to exit, 'clear' to reset conversation")
-    console.print("Press [bold]Escape+Enter[/bold] for new line, [bold]Enter[/bold] to send\n")
+    console.print("Use [bold]/skill[/bold] commands, [bold]Escape+Enter[/bold] for new line, [bold]Enter[/bold] to send\n")
 
     # Set up key bindings for multi-line input
     bindings = KeyBindings()
@@ -145,16 +145,25 @@ def _chat_repl():
             console.print("\nGoodbye!")
             break
 
-        if user_input.lower().strip() in ("exit", "quit"):
+        user_input = user_input.strip()
+
+        if user_input.lower() in ("exit", "quit"):
             console.print("Goodbye!")
             break
 
-        if user_input.lower().strip() == "clear":
-            agent.reset()
-            console.print("[yellow]Conversation cleared[/yellow]\n")
+        # Check for slash commands
+        skill_name, args = agent.parse_skill_command(user_input)
+        if skill_name:
+            result = asyncio.run(agent.execute_skill(skill_name, args))
+            console.print()
+            if result.success:
+                console.print(Markdown(result.content))
+            else:
+                console.print(f"[red]Error:[/red] {result.error}")
+            console.print()
             continue
 
-        if not user_input.strip():
+        if not user_input:
             continue
 
         # Run async chat in a new event loop

@@ -40,6 +40,28 @@ class MemoryConfig(BaseModel):
     )
 
 
+class MCPConfig(BaseModel):
+    """MCP configuration."""
+
+    model_config = ConfigDict(extra="allow")
+
+    servers: dict[str, dict[str, Any]] = Field(
+        default_factory=dict,
+        description="MCP server configurations",
+    )
+
+
+class ToolsConfig(BaseModel):
+    """Tools configuration."""
+
+    model_config = ConfigDict(extra="allow")
+
+    enabled: list[str] = Field(
+        default_factory=lambda: ["shell", "file", "http"],
+        description="Enabled tool names",
+    )
+
+
 class Settings(BaseModel):
     """Main settings schema."""
 
@@ -48,6 +70,8 @@ class Settings(BaseModel):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     hooks: HooksConfig = Field(default_factory=HooksConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
+    mcp: MCPConfig = Field(default_factory=MCPConfig)
+    tools: ToolsConfig = Field(default_factory=ToolsConfig)
 
 
 def expand_path(path: str) -> str:
@@ -104,7 +128,7 @@ def get_default_settings_json() -> str:
                 "provider": "bailian",
                 "bailian": {
                     "api_key_env": "DASHSCOPE_API_KEY",
-                    "api_key": None,  # Set your key here or use env var
+                    "api_key": None,
                     "model": "qwen-max",
                 },
             },
@@ -116,6 +140,12 @@ def get_default_settings_json() -> str:
             },
             "memory": {
                 "directory": "~/.claude/projects/{project_name}/memory",
+            },
+            "mcp": {
+                "servers": {}
+            },
+            "tools": {
+                "enabled": ["shell", "file", "http"]
             },
         },
         indent=2,

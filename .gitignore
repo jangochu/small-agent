@@ -23,3 +23,5 @@ build/
 settings.json
 memory/
 .traces/
+.claude/
+.qoder/

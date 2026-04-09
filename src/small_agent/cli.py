@@ -5,7 +5,10 @@ import os
 import signal
 import sys
 import threading
+import time
 from pathlib import Path
+
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -45,6 +48,12 @@ def print_horizontal_rule():
     width = get_terminal_width()
     # Use \r to ensure we start at beginning of line
     print("\r" + "━" * width, flush=True)
+
+
+def get_horizontal_rule_str() -> str:
+    """Get a horizontal rule string for bottom toolbar."""
+    width = get_terminal_width()
+    return "━" * width
 
 
 @app.command()
@@ -156,8 +165,8 @@ def _chat_repl():
     console.print("[bold green]Small Agent CLI[/bold green]")
     console.print("Type 'exit' or 'quit' to exit, 'clear' to reset conversation\n")
 
-    # Store conversation history for display
-    history: list[tuple[str, str]] = []  # (user_input, assistant_response)
+    # Store conversation history: (user_input, assistant_response, tokens, duration)
+    history: list[tuple[str, str, Optional[dict], Optional[float]]] = []
 
     # Initialize terminal width and setup resize handler
     global _terminal_width
@@ -189,23 +198,31 @@ def _chat_repl():
         console.print("Type 'exit' or 'quit' to exit, 'clear' to reset conversation\n")
 
         # Draw history with user input and assistant response
-        for user_input, assistant_response in history:
+        for user_input, assistant_response, tokens, duration in history:
             console.print(f"[bold blue]• 你：[/bold blue] {user_input}")
-            console.print(f"[bold green]• 助手：[/bold green] {assistant_response}")
+            # Format stats
+            stats = ""
+            if tokens and duration is not None:
+                total_tokens = tokens.get('total_tokens', 0)
+                prompt_tokens = tokens.get('prompt_tokens', 0)
+                completion_tokens = tokens.get('completion_tokens', 0)
+                stats = f" [dim]({total_tokens} tokens, {duration:.1f}s)[/dim]"
+            console.print(f"[bold green]• 助手：[/bold green] {assistant_response}{stats}")
             console.print()
 
         # Draw input box with full-width separators
+        # Top separator line
         print_horizontal_rule()
         try:
-            user_input = session.prompt("")
+            user_input = session.prompt("> ")
         except (EOFError, KeyboardInterrupt):
             # Clear the input line
-            print("\r" + " " * get_terminal_width() + "\r", end="")
+            print("\033[K\r", end="")  # Clear to end of line
             console.print("\nGoodbye!")
             break
-        # Width auto-updated via SIGWINCH handler
+        # Bottom separator line - print on new line after input
+        print()  # New line after input
         print_horizontal_rule()
-        print()  # Extra newline after separator
 
         user_input = user_input.strip()
 
@@ -213,9 +230,13 @@ def _chat_repl():
             print("\033[2J\033[H", end="")
             console.print("[bold green]Small Agent CLI[/bold green]")
             console.print("Type 'exit' or 'quit' to exit\n")
-            for user_input, assistant_response in history:
+            for user_input, assistant_response, tokens, duration in history:
                 console.print(f"[bold blue]• 你：[/bold blue] {user_input}")
-                console.print(f"[bold green]• 助手：[/bold green] {assistant_response}")
+                stats = ""
+                if tokens and duration is not None:
+                    total_tokens = tokens.get('total_tokens', 0)
+                    stats = f" [dim]({total_tokens} tokens, {duration:.1f}s)[/dim]"
+                console.print(f"[bold green]• 助手：[/bold green] {assistant_response}{stats}")
                 console.print()
             print_horizontal_rule()
             console.print("Goodbye!")
@@ -235,9 +256,12 @@ def _chat_repl():
         if not user_input:
             continue
 
-        # Get response
+        # Get response with timing
+        start_time = time.time()
         response = asyncio.run(agent.chat(user_input))
-        history.append((user_input, response.content))
+        duration = time.time() - start_time
+
+        history.append((user_input, response.content, response.usage, duration))
 
 
 async def _chat_single(prompt: str):

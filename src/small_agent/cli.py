@@ -1,7 +1,10 @@
 """CLI entry point."""
 
 import asyncio
+import os
+import signal
 import sys
+import threading
 from pathlib import Path
 
 import typer
@@ -16,6 +19,32 @@ app = typer.Typer(
     help="A CLI agent powered by 阿里云百炼 with harness engineering patterns",
 )
 console = Console()
+
+# Global variable to store current terminal width
+_terminal_width = 80
+_width_lock = threading.Lock()
+
+
+def _handle_sigwinch(signum, frame):
+    """Signal handler for terminal resize events."""
+    global _terminal_width
+    try:
+        _terminal_width = os.get_terminal_size().columns
+    except OSError:
+        pass
+
+
+def get_terminal_width() -> int:
+    """Get current terminal width, updated on resize."""
+    with _width_lock:
+        return _terminal_width
+
+
+def print_horizontal_rule():
+    """Print a full-width horizontal rule using current terminal width."""
+    width = get_terminal_width()
+    # Use \r to ensure we start at beginning of line
+    print("\r" + "━" * width, flush=True)
 
 
 @app.command()
@@ -130,6 +159,16 @@ def _chat_repl():
     # Store conversation history for display
     history: list[tuple[str, str]] = []  # (user_input, assistant_response)
 
+    # Initialize terminal width and setup resize handler
+    global _terminal_width
+    try:
+        _terminal_width = os.get_terminal_size().columns
+    except OSError:
+        _terminal_width = 80
+
+    # Register SIGWINCH handler for terminal resize events
+    signal.signal(signal.SIGWINCH, _handle_sigwinch)
+
     # Set up key bindings for multi-line input
     bindings = KeyBindings()
 
@@ -145,6 +184,7 @@ def _chat_repl():
     while True:
         # Clear screen and redraw history
         print("\033[2J\033[H", end="")  # ANSI clear screen
+
         console.print("[bold green]Small Agent CLI[/bold green]")
         console.print("Type 'exit' or 'quit' to exit, 'clear' to reset conversation\n")
 
@@ -154,15 +194,18 @@ def _chat_repl():
             console.print(f"[bold green]• 助手：[/bold green] {assistant_response}")
             console.print()
 
-        # Draw input box with separators
-        console.print("━" * 60, style="dim")
+        # Draw input box with full-width separators
+        print_horizontal_rule()
         try:
             user_input = session.prompt("")
         except (EOFError, KeyboardInterrupt):
+            # Clear the input line
+            print("\r" + " " * get_terminal_width() + "\r", end="")
             console.print("\nGoodbye!")
             break
-        console.print("━" * 60, style="dim")
-        console.print()
+        # Width auto-updated via SIGWINCH handler
+        print_horizontal_rule()
+        print()  # Extra newline after separator
 
         user_input = user_input.strip()
 
@@ -174,6 +217,7 @@ def _chat_repl():
                 console.print(f"[bold blue]• 你：[/bold blue] {user_input}")
                 console.print(f"[bold green]• 助手：[/bold green] {assistant_response}")
                 console.print()
+            print_horizontal_rule()
             console.print("Goodbye!")
             break
 

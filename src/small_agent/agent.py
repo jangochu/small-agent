@@ -10,7 +10,7 @@ from small_agent.llm.base import LLMProvider, LLMResponse
 from small_agent.llm.bailian import BailianProvider, BailianConfig
 from small_agent.mcp.client import MCPClient
 from small_agent.tools.registry import ToolRegistry
-from small_agent.tools.builtin import ShellTool, FileTool, HttpTool
+from small_agent.tools.builtin import ShellTool, FileTool, HttpTool, WeatherTool
 from small_agent.skills.registry import SkillRegistry
 from small_agent.skills.builtin import HelpSkill, ClearSkill, ToolsSkill, ConfigSkill
 
@@ -57,6 +57,7 @@ class Agent:
         self.tool_registry.register(ShellTool())
         self.tool_registry.register(FileTool())
         self.tool_registry.register(HttpTool())
+        self.tool_registry.register(WeatherTool())
 
     def _setup_builtin_skills(self):
         """Register built-in skills."""
@@ -99,6 +100,7 @@ class Agent:
                 settings=self.settings,
                 llm_provider=self.llm_provider,
                 working_dir=self.working_dir,
+                tool_registry=self.tool_registry,
             )
         return self._harness
 
@@ -121,7 +123,8 @@ class Agent:
 
     async def chat(self, prompt: str, **options) -> LLMResponse:
         """Send a prompt and get response."""
-        return await self.harness.process_prompt(prompt, options)
+        tools = self.get_available_tools()
+        return await self.harness.process_prompt(prompt, options, tools=tools)
 
     async def run(self, prompt: str, **options) -> LLMResponse:
         """Alias for chat()."""

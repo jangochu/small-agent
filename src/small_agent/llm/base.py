@@ -21,6 +21,7 @@ class LLMResponse(BaseModel):
     model: str = Field(description="Model that generated the response")
     usage: Optional[dict] = Field(default=None, description="Token usage info")
     raw: Optional[dict] = Field(default=None, description="Raw provider response")
+    tool_calls: Optional[list[dict]] = Field(default=None, description="Tool calls from the LLM")
 
 
 class LLMProvider(ABC):
@@ -43,6 +44,7 @@ class LLMProvider(ABC):
         self,
         messages: list[dict],
         config: LLMConfig,
+        tools: Optional[list[dict]] = None,
         **options,
     ) -> LLMResponse:
         """Generate a completion response.
@@ -50,6 +52,7 @@ class LLMProvider(ABC):
         Args:
             messages: List of message dicts with 'role' and 'content'
             config: Provider configuration
+            tools: Optional list of tool definitions for function calling
             **options: Additional generation options (temperature, max_tokens, etc.)
 
         Returns:
@@ -62,6 +65,7 @@ class LLMProvider(ABC):
         self,
         messages: list[dict],
         config: LLMConfig,
+        tools: Optional[list[dict]] = None,
         **options,
     ) -> AsyncGenerator[str, None]:
         """Stream a completion response.
@@ -69,6 +73,7 @@ class LLMProvider(ABC):
         Args:
             messages: List of message dicts with 'role' and 'content'
             config: Provider configuration
+            tools: Optional list of tool definitions for function calling
             **options: Additional generation options
 
         Yields:

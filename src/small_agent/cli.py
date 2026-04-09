@@ -125,8 +125,10 @@ def _chat_repl():
         raise typer.Exit(1)
 
     console.print("[bold green]Small Agent CLI[/bold green]")
-    console.print("Type 'exit' or 'quit' to exit, 'clear' to reset conversation")
-    console.print("Use [bold]/skill[/bold] commands, [bold]Escape+Enter[/bold] for new line, [bold]Enter[/bold] to send\n")
+    console.print("Type 'exit' or 'quit' to exit, 'clear' to reset conversation\n")
+
+    # Store conversation history for display
+    history: list[tuple[str, str]] = []  # (user_input, assistant_response)
 
     # Set up key bindings for multi-line input
     bindings = KeyBindings()
@@ -136,18 +138,42 @@ def _chat_repl():
         """Insert newline on Escape+Enter."""
         event.current_buffer.insert_text("\n")
 
-    session = PromptSession(key_bindings=bindings)
+    session = PromptSession(
+        key_bindings=bindings,
+    )
 
     while True:
+        # Clear screen and redraw history
+        print("\033[2J\033[H", end="")  # ANSI clear screen
+        console.print("[bold green]Small Agent CLI[/bold green]")
+        console.print("Type 'exit' or 'quit' to exit, 'clear' to reset conversation\n")
+
+        # Draw history with user input and assistant response
+        for user_input, assistant_response in history:
+            console.print(f"[bold blue]• 你：[/bold blue] {user_input}")
+            console.print(f"[bold green]• 助手：[/bold green] {assistant_response}")
+            console.print()
+
+        # Draw input box with separators
+        console.print("━" * 60, style="dim")
         try:
-            user_input = session.prompt("You: ")
+            user_input = session.prompt("")
         except (EOFError, KeyboardInterrupt):
             console.print("\nGoodbye!")
             break
+        console.print("━" * 60, style="dim")
+        console.print()
 
         user_input = user_input.strip()
 
         if user_input.lower() in ("exit", "quit"):
+            print("\033[2J\033[H", end="")
+            console.print("[bold green]Small Agent CLI[/bold green]")
+            console.print("Type 'exit' or 'quit' to exit\n")
+            for user_input, assistant_response in history:
+                console.print(f"[bold blue]• 你：[/bold blue] {user_input}")
+                console.print(f"[bold green]• 助手：[/bold green] {assistant_response}")
+                console.print()
             console.print("Goodbye!")
             break
 
@@ -155,23 +181,19 @@ def _chat_repl():
         skill_name, args = agent.parse_skill_command(user_input)
         if skill_name:
             result = asyncio.run(agent.execute_skill(skill_name, args))
-            console.print()
             if result.success:
                 console.print(Markdown(result.content))
             else:
                 console.print(f"[red]Error:[/red] {result.error}")
-            console.print()
+            input("[Press Enter to continue...]")
             continue
 
         if not user_input:
             continue
 
-        # Run async chat in a new event loop
+        # Get response
         response = asyncio.run(agent.chat(user_input))
-
-        console.print()
-        console.print(Markdown(response.content))
-        console.print()
+        history.append((user_input, response.content))
 
 
 async def _chat_single(prompt: str):
